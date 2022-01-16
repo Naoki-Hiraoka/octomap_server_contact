@@ -56,6 +56,10 @@ namespace octomap_server_contact
 
       tf::StampedTransform sensorToWorldTf;
       try {
+	this->m_tfListener.waitForTransform(this->m_worldFrameId,
+					    msg->datas[i].header.frame_id,
+					    msg->datas[i].header.stamp,
+					    ros::Duration(3.0));
         this->m_tfListener.lookupTransform(this->m_worldFrameId,
                                            msg->datas[i].header.frame_id,
                                            msg->datas[i].header.stamp,
