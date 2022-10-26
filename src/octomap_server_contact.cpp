@@ -48,6 +48,10 @@ namespace octomap_server_contact
 
     ros::NodeHandle pnh = privateNh;
     this->contactSensorSub_ = pnh.subscribe("contact_sensors_in", 1, &OctomapServerContact::insertContactSensorCallback, this);
+
+    m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (pnh, "freespace_cloud_in", 5);
+    m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
+    m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServerContact::insertFreeCloudCallback, this, boost::placeholders::_1));
   }
 
   void OctomapServerContact::insertContactSensorCallback(const jsk_recognition_msgs::ContactSensorArray::ConstPtr& msg) {
@@ -85,6 +89,58 @@ namespace octomap_server_contact
     this->publishAll(msg->header.stamp);
   }
 
+  void OctomapServerContact::insertFreeCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
+    ros::WallTime startTime = ros::WallTime::now();
+
+    PCLPointCloud pc; // input cloud for filtering and ground-detection
+    pcl::fromROSMsg(*cloud, pc);
+
+    tf::StampedTransform sensorToWorldTf;
+    try {
+      m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
+    } catch(tf::TransformException& ex){
+      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
+      return;
+    }
+
+    Eigen::Matrix4f sensorToWorld;
+    pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
+
+    // set up filter for height range, also removes NANs:
+    pcl::PassThrough<PCLPoint> pass_x;
+    pass_x.setFilterFieldName("x");
+    pass_x.setFilterLimits(m_pointcloudMinX, m_pointcloudMaxX);
+    pcl::PassThrough<PCLPoint> pass_y;
+    pass_y.setFilterFieldName("y");
+    pass_y.setFilterLimits(m_pointcloudMinY, m_pointcloudMaxY);
+    pcl::PassThrough<PCLPoint> pass_z;
+    pass_z.setFilterFieldName("z");
+    pass_z.setFilterLimits(m_pointcloudMinZ, m_pointcloudMaxZ);
+
+    // directly transform to map frame:
+    pcl::transformPointCloud(pc, pc, sensorToWorld);
+
+    // just filter height range:
+    pass_x.setInputCloud(pc.makeShared());
+    pass_x.filter(pc);
+    pass_y.setInputCloud(pc.makeShared());
+    pass_y.filter(pc);
+    pass_z.setInputCloud(pc.makeShared());
+    pass_z.filter(pc);
+
+    PCLPointCloud pc_ground = pc;
+    pc_ground.header = pc.header;
+
+    PCLPointCloud pc_nonground; // empty
+    pc_nonground.header = pc.header;
+
+    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
+
+    double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+    ROS_DEBUG("FreeSpace Pointcloud insertion in OctomapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc.size(), pc_nonground.size(), total_elapsed);
+
+    publishAll(cloud->header.stamp);
+  }
 }
 
 int main(int argc, char** argv){

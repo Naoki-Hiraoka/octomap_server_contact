@@ -48,9 +48,11 @@ namespace octomap_server_contact {
    public:
     OctomapServerContact(const ros::NodeHandle& privateNh = ros::NodeHandle("~"), const ros::NodeHandle &nh = ros::NodeHandle());
     void insertContactSensorCallback(const jsk_recognition_msgs::ContactSensorArray::ConstPtr& msg);
-
+    void insertFreeCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
    protected:
     ros::Subscriber contactSensorSub_;
+    message_filters::Subscriber<sensor_msgs::PointCloud2>* m_freeSpacePointCloudSub;
+    tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfFreeSpacePointCloudSub;
     OcTreeContact* octreeContact_;
   };
 }
