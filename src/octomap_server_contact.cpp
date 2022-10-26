@@ -49,6 +49,7 @@ namespace octomap_server_contact
     ros::NodeHandle pnh = privateNh;
     this->contactSensorSub_ = pnh.subscribe("contact_sensors_in", 1, &OctomapServerContact::insertContactSensorCallback, this);
 
+    // cloud_inと同じ点を与えると、occupied cellを消してしまうので、cloud_inに含まれない、消したい部分の点群のみを与えること
     m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (pnh, "freespace_cloud_in", 5);
     m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
     m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServerContact::insertFreeCloudCallback, this, boost::placeholders::_1));
